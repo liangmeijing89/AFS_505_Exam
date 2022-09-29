@@ -1,0 +1,337 @@
+---
+title: "Final Exam"
+author: "Meijing_Liang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+<style>
+  .h2 {font-size: 16px; color: black;}
+  .h3 {font-size: 16px; color: dodgerblue;}
+  .h4 {font-size: 14px; color: green;}
+  .nav-pills{color: black;}
+  .nav-pills>li>a {color: black; background-color: #d3d3d3;}
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Q1. 
+
+#### {.h2}
+What are the basic R data structures? What are the differences between them? In what context would you use one versus the other?  
+<br>
+
+#### {.h3}
+(1).  The basic R structure includes the vector, matrix, array, dataframe, list, and factors.   
+
+(2).  Different R data structures vary by their dimensions and their abilities for holding different data types.
+
+  -  Vector is a one dimensional array. Each vector can only hold one type of data (numeric, logical, or character).
+  -  Factor is similar to vector, but it contain categorical data.
+  -  Matrix is a two dimensional array. Each element within one matrix can only be one type of data (numeric, logical, or character). 
+  -  Array is similar to matrix, but it can have more than two dimensions.
+  -  Data frame is a two dimensional object. It can hold different types of data in different columns. 
+  -  List can be a combination of vector, matrix, dataframe, and even other lists.  
+
+
+(3).  Vector is commonly used if data only has one dimension. Factor can be used when the data is categorical and the number of category is not too large. For ordinal data, an ordered factor can be used. Matrix and dataframe can be used when data has two dimensions. But when different columns need to contain different data types, the dataframe is better than matrix. List can be use to handle more complicated datasets, since it can contain elements of different data types.  
+
+  -  Vector can be used with c( ) or other commands
+  -  Matrix can be used with matrix( )
+  -  Dataframe can be used with data.frame( )
+  -  List can be used with list( )
+  -  Factor can be used with factor( )
+<br>
+
+
+# Q2. {.tabset  .tabset-pills}
+#### {.h2}
+You are provided a folder with three location (county) names, each of which has sub-folders for one or two crops, which in turn has a data file.
+<br>
+
+## a. Merge Data
+#### {.h2}
+Iterate through the folders to read all the files and merge them into a single data frame. You can use a “loop” to iterate or for efficiency check out the list.files() function.
+<br>
+<br>
+
+#### {.h4} 
+*Create a  character vector 'wd' to store the current working directory of the crop dataset.*
+```{r}
+wd <- paste(getwd(), "/CropModelResults", sep = "")
+```
+
+*Create variables 'ls' and 'abls' to store the relative path and the absolute path, respectively, for all files in the "CropModelResults" folder and its subfolders.*
+```{r}
+ls <- list.files(wd, recursive = TRUE) # relative path
+abls <- list.files(wd, recursive = TRUE, full.names = TRUE) # absolute path
+# View ls
+head(ls)
+# Extract total file numbers.
+len <- length(ls)
+```
+
+*Create an empty variable 'df' to read in all the .csv files from its absolute path.*
+```{r}
+df<- NULL
+for (i in 1:len){
+  df[[i]] <- read.csv(abls[[i]], header = TRUE, sep = ",")
+}
+```
+
+*Combine all the files into one.*
+```{r}
+# Install and load the "data.table" package.
+# install.packages("data.table")
+library(data.table)
+# Use 'rbindlist' function to combine all .csv files
+crop <- rbindlist(df)
+# Inspect final crop dataframe 
+dim(crop)
+```
+
+*Briefly view the merged crop data set.*
+```{r}
+head(crop)
+```
+<br>
+
+## b. Add Columns
+#### {.h2}
+Add four additional columns to the merged dataframe corresponding to the county name, crop name, latitude and longitude of the data. You must get this information from the directory structure you are looping through or the strings returned by the call to list.files().
+<br>
+<br>
+
+#### {.h4} 
+*Split working directories to name strings.*
+```{r}
+# Create a dataframe 'nmls'. Split working directories and organize them in it.
+nmls <- data.frame(matrix(unlist(strsplit(ls, "/")), 12, 4, byrow = TRUE))
+# Name each column.
+colnames(nmls) <- c("county_name", "crop_name", "latitude_longitude", "filename")
+# View the dataframe.
+nmls
+```
+
+*Further split latitude and longitude to their separate columns.*
+```{r}
+# Use the latitude_longitude data from 'nmls' to create a matrix 'lat.long'. Split the 'latitude_longitude' column to two by using the 'Northing' symbol 'N'.
+lat.long <- matrix(unlist(strsplit(nmls[,3], "N")), 12, 2, byrow = TRUE)
+# Remove the 'Westing' symbol 'W' from the end of longitude.
+lat.long[,2] <- unlist(strsplit(lat.long[,2], "W"))
+# Rename the two new columns.
+colnames(lat.long) <- c("latitude", "longitude")
+```
+ 
+*Combine "county_name", "crop_name", "latitude" and "longitude" into one dataframe.*
+```{r}
+# Create a dataframe 'fcol' to combine the first two columns of 'nmls' and 'lat.long'.
+fcol <- cbind(nmls[,1:2], lat.long)
+# View the dataframe.
+fcol
+```
+
+*Generate four additional columns for the crop dataset.*
+```{r}
+# Create empty variable to store the 4 columns.
+crop.fcol <- NULL
+# Use for() loop to duplicate each row from 'fcol' 39 or 40 times (depending on the row numbers of the original csv files - nrow(df[[i]]) ).
+for (i in 1:len){
+  crop.fcol <- rbind(crop.fcol, fcol[rep(i, nrow(df[[i]])), ])
+}
+
+# Change 4 columns' data type to factor.
+crop.fcol[] <- lapply(crop.fcol, factor)
+# Combine additional columns with the crop data.
+crop.dat <- cbind(crop, crop.fcol)
+
+# Summarize the four additional columns.
+summary(crop.dat[,8:11])
+```
+
+*Briefly view the new crop data.*
+```{r}
+head(crop.dat)
+```
+<br>
+
+## c. Export File
+#### {.h2}
+Rename the column irrig to irrigation_demand and precip to precipitation and export the dataframe as a csv file.
+<br>
+<br> 
+
+#### {.h4}
+*Rename 'irrig' and 'precip' columns. Export the final dataframe.*
+```{r}
+colnames(crop.dat)[6:7] <- c("irrigation_demand", "precipitation") # rename
+# Briefly view the renamed crop data.
+head(crop.dat)
+```
+
+*Export the .csv file.*
+```{r}
+write.table(crop.dat, "CropData.csv", sep = ",", col.names = T, row.names = F, quote = F)
+```
+<br>
+
+## d. Summarize
+#### {.h2}
+Summarize the annual 'irrigation demand' by 'crop name' and 'county name'.  
+<br>  
+
+#### {.h4}
+*Summarize the irrigation demand by crop and county names.*
+```{r}
+# Use aggregate() function.
+ir.d <- aggregate(irrigation_demand ~ crop_name + county_name, crop.dat, summary)
+# View the summary.
+ir.d
+```
+<br>
+
+## e. Average Yield
+#### {.h2}
+What is the average yield of Winter Wheat in Walla Walla at 46.03125N118.40625W for the year ranges (1981-1990), (1991-2000), and (2001-2019)?
+<br> 
+<br>
+
+#### {.h4}
+*Subseting the Walla Walla winter wheat at 46.03125N118.40625W from the crop dataset.*
+```{r}
+sub.crop <- crop.dat[(crop_name == "Winter_Wheat" & county_name == "WallaWalla" & latitude == "46.03125" & longitude == "118.40625"),]
+# Check the dimension.
+dim(sub.crop)
+```
+
+*Create a function 'y.r' to convert the year column to a year_range column.*
+```{r}
+y.r <- function (x) {
+  
+  # Extract the year from 'harvest_date' column.
+  x$year_range <- substr(x$harvest_date, 1, 4) 
+  
+  # Convert year to year range.
+  for (i in 1:nrow(x)){
+    
+    if (x$year_range[i] <= 1990 & x$year_range[i] >= 1981) {
+      x$year_range[i] <- "(1981-1990)"}
+    
+    else if ((x$year_range[i] <= 2000 & x$year_range[i] >= 1991)){
+      x$year_range[i] <- "(1991-2000)"}
+    
+    else if ((x$year_range[i] <= 2019 & x$year_range[i] >= 2001)){
+      x$year_range[i] <- "(2001-2019)"}
+    
+    else x$year_range[i] <- "(1980)"
+  }
+  
+  # Change data type to factor.
+  x$year_range <- as.factor(x$year_range)
+}
+```
+
+*Use y.r function to convert year column to year range for the subsetted crop data.*
+```{r}
+sub.crop$year_range <- y.r(sub.crop)
+summary(sub.crop) 
+```
+
+*Calculate the 'sub.crop' average yield for the three year ranges.*
+```{r}
+# Use tapply() function.
+average.yield <- with(sub.crop, tapply(yield, year_range, mean))
+
+```
+
+*Average yield of Winter Wheat in Walla Walla at 46.03125N118.40625W from different year range is described below:*
+```{r}
+data.frame(average.yield)
+```
+
+<br>
+
+## f. High-Yield Location
+#### {.h2}
+Which location has highest yield (average) for the time period (2001-2019) for grain corn?
+<br>
+<br>
+
+#### {.h4}
+*Use 'y.r' function to convert year column to a year range column for crop dataset.*
+```{r}
+crop.dat$year_range <- y.r(crop.dat)
+#summary(crop.dat$year_range) 
+#head(crop.dat)
+```
+
+*Subset the time period (2001-2019) for grain corn from main dataset. Calculate the average yield by county name.*
+```{r}
+gr.corn <- with(crop.dat[crop_name=='Corn_grain'|year_range=='(2001-2019)',], tapply(yield, county_name, mean))
+# View the results
+gr.corn
+```
+
+*Rank the results, and extract the highest yield location.*
+```{r}
+h.y <- gr.corn[order(gr.corn, decreasing = T)][1]
+```
+
+*Answer to Question:*
+```{r}
+cat("\n",names(h.y),"county has the highest yield (",h.y,") for the time period (2001-2019) for grain corn.\n")
+```
+<br>
+
+## g. GitHub
+#### {.h2}
+GitHub link 
+<br>
+<br>
+
+#### {.h4}
+R markdown file and csv file: https://github.com/liangmeijing89/AFS_505_Exam  
+<br>
+
+R markdown html page: https://liangmeijing89.github.io/AFS_505_Exam/  
+<br>
+<br>
+
+# Q3.
+#### {.h2}
+Was the data provided to you well described? If not, what information was missing? Comment on what kind of metadata (description about the data) should be included as best practice while sharing datasets?
+<br>
+
+#### {.h3}
+(1).  The data was not well described.   
+
+(2).  The metadata of the dataset is missing.   
+
+(3).  While sharing dataset, the following basic description of the dataset should be included: 
+
+  -  An informative title to describe the purpose of the dataset. 
+  -  The data sources/authors and the publications information (if any).   
+  -  The usage of the dataset.
+  -  The dataset attributes (how many features and rows).
+  -  The Description for each feature of the attributes. 
+  -  If there are any abbreviations for names, then they should be proper explained.
+  -  If there are any missing values in the dataset.  
+<br>
+
+# Q4. Extra Credit (Optional)
+#### {.h2}
+Create an R Markdown file with different tabs for each of the six parts of question 2.
+In a seventh tab add the Github link which has your R script/ R markdown file and the csv file generated from 2 (c).
+<br>
+
+#### {.h3}
+See Question 2.  
+<br>
+
+R markdown file and csv file: https://github.com/liangmeijing89/AFS_505_Exam  
+<br>
+
+R markdown html page: https://liangmeijing89.github.io/AFS_505_Exam/  
+<br>
